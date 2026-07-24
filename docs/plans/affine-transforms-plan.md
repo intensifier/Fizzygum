@@ -685,7 +685,7 @@ EXCLUSION: no inspector change (a future item).
    buffer-warp for text (fact 3.7), so it is a superset of this plan, not an alternative.
    The islands built here do not foreclose it; they would become its compositor layer if it
    were ever revisited. The vault stub `switch-to-local-co-ordinates` is superseded by this
-   decision.
+   decision. Re-examined against new evidence 2026-07-24 and REAFFIRMED — see §5-R.
 2. **Render-through rotation for composite subtrees** (apply the CTM and let children
    composite individually). Rejected for correctness: independent per-child AA edges under a
    rotated CTM produce hairline seams at abutting edges; also re-rasterizes content every
@@ -699,6 +699,94 @@ EXCLUSION: no inspector change (a future item).
 5. **Per-string/per-glyph shadow or text special-casing under rotation.** The unified shadow
    rule stands (§4.8); text rotates as part of the island buffer, period (native
    crisp-rotated-text is banked §7.5 and pixel-test-excluded).
+
+### §5-R Re-examination (2026-07-24) — island choice REAFFIRMED against Maloney's retrospective
+
+**Trigger.** The owner surfaced John Maloney's own retrospective on Squeak Morphic ("An
+Introduction to Morphic: The Squeak User Interface Framework", ~2000):
+
+> "First, morphic badly needs an overhaul in its handling of rotation and scaling — features
+> that were retro-fitted into it long after the initial design and implementation were done.
+> The original design decision to have a uniform, global coordinate system should probably be
+> reversed; each morph would then provide the coordinate system for its submorphs with
+> optional rotation and scaling."
+
+Since the framework's own author regrets the design lineage this plan follows, §5.1 was
+re-examined in full: this plan's recorded rationale (§1.2/§5/§10.11), the as-built evidence
+accumulated since 2026-07-09, and fresh research into the post-2000 experimental record.
+**Outcome: the island decision stands.** The record:
+
+1. **What the quote actually targets.** Squeak's rotation retrofit is `TransformationMorph` +
+   WarpBlt — the island architecture done EXPOSED: users saw the wrapper appear in their
+   submorph lists, event mapping through it was buggy, and there was no auto-materialize/
+   dissolve, no input plane-mapping discipline, no layout-coupling story. Maloney's "should
+   probably be reversed" is a speculation Squeak itself never ran (it is global-coords to this
+   day). The wart he names is the exposed-wrapper irregularity — which Phase 4C sugar, the
+   §4.13 two-vocabulary law, and the raw-pointer-read gate specifically remove. Fizzygum
+   as-built already IS "each widget provides a coordinate system where transformed" — the
+   reversal implemented sparsely (at islands) instead of universally.
+2. **The post-2000 experimental record** (the experiments Maloney could not yet cite):
+   - **LivelyKernel ran the reversal** and produced this plan's standing negative case law
+     (§1.2 D3/D4): matrix-as-truth forced epsilon extraction of angle/scale; transformed
+     bounds fed to the layout solver oscillated ("crawling" morphs).
+   - **Industry converged on the hybrid**: CSS transforms / Core Animation / WPF / Flutter all
+     expose a per-node transform API and implement it as rasterize-then-composite layers —
+     "Lively API, island implementation" is the mainstream compositor architecture, not a
+     compromise.
+   - **Morphic 3 / Cuis VectorGraphics (Vuletich) ran the reversal RIGHT — and priced it.**
+     Verified timeline (Cuis `Documentation/CuisHistory.md`; jvuletich.org): project start
+     2004; first demo 2007 ("Floating Point local coordinates, Vector Graphics and high
+     quality rasterization" — all three pillars named together from day one); TrueType in
+     100% Smalltalk 2019; optional Cuis packages 2020; VectorEngine added to the official
+     OpenSmalltalk VMs 2021 ("can now be used as the main UI"); Cuis 6 hierarchy refactor
+     ~2022; perf work still landing in 7.4+ (2025–26). ≈17 years, essentially one architect,
+     no backward-compat obligations, no bit-exact determinism requirement. How it works:
+     per-morph float local coordinates (`PlacedMorph` `location` = translation-only object |
+     full affine — even the purist design fast-paths translation, the same concession as our
+     identity dormancy); no stored global bounds (display bounds derived from drawing); and
+     the load-bearing piece — a purpose-built PREFILTERING rasterizer (shapes modeled as
+     continuous color functions, filtered, sampled at sub-pixel positions) that solves the
+     abutting-AA-seam problem INSIDE the rasterizer (Vuletich: "completely avoids the problem
+     [of white seams in adjacent polygons], without creating other artifacts") and rasterizes
+     TrueType outlines through the same engine — text is vectors all the way down, so zoom is
+     genuinely lossless. Performance required a native VM plugin; there is no cached-raster
+     layer tier, so a transform animation re-rasterizes content every frame (the case our
+     §4.4 island buffer cache wins structurally).
+3. **The dependency chain this exposes.** Local-coords-everywhere is only right if
+   render-through is high quality; render-through is only high quality if the rasterizer is
+   transform-native, conflation-free, and vector-text-capable. Fizzygum's substrate fails all
+   three preconditions (canvas-2D `drawImage` compositing; SWCanvas bitmap glyph atlases at
+   shipped densities {1,2} whose metrics deliberately don't scale; the byte-exact cross-engine
+   suite). Islands solve at the COMPOSITING layer what Morphic 3 solves at the RASTERIZER
+   layer — the only layer Fizzygum owns cheaply.
+4. **As-built evidence since 2026-07-09 cuts both ways and nets for islands.** For: the whole
+   arc landed additively in days (gates green throughout; dormant byte-identity held); total
+   island machinery ≈1,100 lines across 3 files + ~30 plane-mapping call sites. Against (the
+   honest steelman for Maloney's side): the latent screen-vs-plane bug tail (§7.5 A–G, rough
+   edges R1–R4, §7.11–§7.13) is exactly the "dormant until tilted" trap a uniform model would
+   not have — answered structurally by `check-raw-pointer-reads.js` + the mapped-`pos`
+   convention, and bounded by the observation that reversed systems relocate rather than
+   eliminate the class (screen-space caches/overlays still mix planes; Lively had those bugs
+   too). Feature-intrinsic complexity (claimsSpace, anchor-under-resize/pinning, drop policy,
+   the halo model) exists under EITHER architecture and must not be billed to islands.
+5. **Verdict + the road not foreclosed.** REAFFIRMED. §5.1's superset relation still holds:
+   a full conversion still needs islands for SW text and seam-free subtree compositing. The
+   banked ladder — §7.7 (vector-replay appearances) + §7.8 (SW sampling) + §7.4 (density
+   folding) + §7.1/§7.2 (layer policy / leaf self-warp) — is an incremental, island-compatible
+   road toward the Morphic-3 end state; if a zoomable-UI ambition ever becomes central, the
+   first domino is SWCanvas VECTOR TEXT (a Vuletich-scale project), not a coordinate-model
+   rewrite.
+6. **Reopen conditions (falsifiable — re-litigate only on one of these):** (a) dpr-1
+   world-zoom becomes a core interaction and §7.4+§7.8 prove insufficient AFTER being
+   implemented; (b) the plane-mismatch bug class keeps producing escapes DESPITE the gate;
+   (c) SWCanvas is replaced by a transform-native vector rasterizer with vector text; (d) a
+   ground-up geometry-core redesign is on the table for independent reasons — in a
+   from-scratch design Maloney's reversal is the right call, and this record says so.
+
+Sources: jvuletich.org (Morphic 3 pages; prefiltering + no-seams claims), Cuis-Smalltalk-Dev
+`Documentation/CuisHistory.md` (timeline), "Prefiltering Antialiasing for General Vector
+Graphics" (Vuletich). The Cuis class-structure specifics (`PlacedMorph`/`location`) are from
+source reading, not the cited pages.
 
 ---
 

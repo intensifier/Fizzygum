@@ -412,6 +412,10 @@ window is seen as a window by drop policy). Full serialization internals:
   here.
 - The `§7.5 KNOWN BUGS` dossier in that plan (Bugs A/B/D/E/F/G; C was an audit-phase error) is the
   as-built record of the interaction/reparent/anchor edge cases summarized above.
+- The island-over-per-widget-local-coordinates decision was re-examined 2026-07-24 against
+  Maloney's Morphic retrospective and the Morphic 3 / Cuis VectorGraphics record, and
+  REAFFIRMED — the decision record, the evidence, and the falsifiable reopen conditions are
+  that plan's §5-R.
 - Archived closed plans (see `docs/archive/INDEX.md`):
   - `affine-geometry-api-plan.md` — the two-vocabulary API + `mapRectExact` (full table).
   - `island-buffer-cache-plan.md` + `island-buffer-cache-rectlist-plan.md` — the buffer cache and
